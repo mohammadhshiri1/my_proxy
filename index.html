@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>پروکسی ساده</title>
+  <style>
+    body { font-family: Tahoma; background: #1a1a2e; color: #eee; margin: 0; height: 100vh; display: flex; flex-direction: column; }
+    #bar { background: #16213e; padding: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+    input, button { padding: 8px 12px; border: none; border-radius: 6px; }
+    input { flex:1; min-width: 200px; background: #0f3460; color: #eee; }
+    button { background: #e94560; color: white; font-weight: bold; cursor: pointer; }
+    iframe { flex:1; border:none; }
+    .center-note { margin: 10px; color: #aaa; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <input id="targetUrl" type="text" value="https://arena.ai" placeholder="آدرس سایت هدف">
+    <button onclick="go()">بارگذاری</button>
+  </div>
+  <div class="center-note">
+    پروکسی CORS پیش‌فرض: <span id="proxyLabel">corsproxy.io</span> (قابل تغییر در کد)
+  </div>
+  <iframe id="frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation"></iframe>
+
+  <script>
+    // می‌تونی این آدرس رو با هر پروکسی CORS دیگه‌ای عوض کنی
+    const PROXY_BASE = 'https://corsproxy.io/?';
+
+    function makeAbsolute(url, base) {
+      try { return new URL(url, base).href; } catch { return url; }
+    }
+
+    async function go() {
+      const target = document.getElementById('targetUrl').value.trim();
+      if (!target) return alert('آدرس را وارد کنید');
+
+      const fetchUrl = PROXY_BASE + encodeURIComponent(target);
+      document.getElementById('frame').srcdoc = '<p style="padding:20px">در حال بارگذاری...</p>';
+
+      try {
+        const res = await fetch(fetchUrl);
+        if (!res.ok) throw new Error(`خطای ${res.status}`);
+        const html = await res.text();
+
+        // بازنویسی HTML برای لینک‌ها و منابع
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        const rewrite = (selector, attr) => {
+          doc.querySelectorAll(selector).forEach(el => {
+            const val = el.getAttribute(attr);
+            if (!val || /^(javascript|data|mailto|#)/i.test(val)) return;
+            const abs = makeAbsolute(val, target);
+            el.setAttribute(attr, PROXY_BASE + encodeURIComponent(abs));
+          });
+        };
+        rewrite('a[href]', 'href');
+        rewrite('img[src]', 'src');
+        rewrite('script[src]', 'src');
+        rewrite('link[href]', 'href');
+        rewrite('iframe[src]', 'src');
+        rewrite('form[action]', 'action');
+        // اضافه کردن base برای منابع نسبی
+        const base = doc.createElement('base');
+        base.href = target;
+        doc.head.appendChild(base);
+
+        document.getElementById('frame').srcdoc = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+      } catch (err) {
+        document.getElementById('frame').srcdoc = `<p style="padding:20px;color:red;">خطا: ${err.message}</p>`;
+      }
+    }
+
+    // بارگذاری خودکار اولیه (اختیاری)
+    window.addEventListener('load', () => {
+      // برای اجرای خودکار کامنت‌زدایی کن:
+      // go();
+    });
+  </script>
+</body>
+</html>
